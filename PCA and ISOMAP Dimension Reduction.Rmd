@@ -341,22 +341,3 @@ rm(calc_geodestic_dist)
 rm(calc_residual_variance)
 rm(isomap_tuning)
 ```
-
-## LLE
-
-LLE assumes two things
-1. That the manifold is continuous (i.e. has no holes)
-2. The the data is not noisy
-
-These is also a further restriction that the number of neighbors in the K-NN algorithm in the first step must be greater than d, the number of dimensions in the lower dimensional space that we are trying to project to. This ensures that we weights that we calculate to construct the lower dimensional space are stable and are not underdetermined.
-
-We again need to specify k and d, where k>d.
-
-```{r}
-test_lle <- LLE(as.matrix(ard1_M[,-data_cols]), dim = 2, k = 5)
-```
-
-```{r}
-#library(lle)
-#install.packages("lle")
-```
