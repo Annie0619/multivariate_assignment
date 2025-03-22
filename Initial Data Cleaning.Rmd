@@ -1,0 +1,274 @@
+---
+title: "Initial Data Cleaning"
+author: "Andomei Smit: SMTAND051"
+date: "22/03/2025"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_caption: true
+    keep_tex: yes
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+# Load packages
+
+```{r packages, warning=FALSE, message=FALSE}
+library(dplyr)
+library(tidyr)
+library(xtable)
+library(splitstackshape)
+library(FactoMineR)
+library(ggplot2)
+library(factoextra)
+library(lattice)
+library(permute)
+library(vegan)
+Sys.setenv(RGL_USE_NULL = TRUE) # need this to get RDRToolbox installed
+library(RDRToolbox)
+library(FNN)
+library(e1071)
+rm(list=ls())
+```
+
+# Data preparation
+
+## Load data
+```{r load_data}
+# load original margins
+margin_df <- read.delim("data/data_Mar_64.txt", sep = ",")
+shape_df <- read.delim("data/data_Sha_64.txt", sep = ",")
+texture_df <- read.delim("data/data_Tex_64.txt", sep = ",")
+
+colnames(margin_df) <- c("Species", paste0("Feature_", 1:64))
+colnames(shape_df) <- c("Species", paste0("Feature_", 1:64))
+colnames(texture_df) <- c("Species", paste0("Feature_", 1:64))
+```
+
+Investigate the missing features and remove the species missing features. Note that the samples do not have a unique identifier that is the same for each sample across the three features. This means that for any sample missing one of the features, it is impossible to know which sample it relates to. For that reason, all the samples for that species needs to be removed.
+
+## Remove species with samples missing features
+```{r quick_clean}
+# texture only has 1598 observations:
+#table(texture_df$Species) # acer campestre only has 14 images
+#table(shape_df$Species) # only has 15 Acer Capillipes
+
+margin_df <- margin_df[-which(margin_df$Species== "Acer Campestre"),]
+shape_df <- shape_df[-which(shape_df$Species== "Acer Campestre"),]
+texture_df <- texture_df[-which(texture_df$Species== "Acer Campestre"),]
+
+margin_df <- margin_df[-which(margin_df$Species== "Acer Capillipes"),]
+shape_df <- shape_df[-which(shape_df$Species== "Acer Capillipes"),]
+texture_df <- texture_df[-which(texture_df$Species== "Acer Capillipes"),]
+```
+
+## Summary statistics for feature vectors per feature
+Generate some summary statistics to look at each of the feature vectors.
+
+```{r summ_margin}
+# Generate summary statistics for continuous variables and round to 2 decimals
+summary_stats_margin <- margin_df %>%
+  summarise(across(where(is.numeric), 
+                   list(Count = ~sum(!is.na(.)),
+                        Mean = ~round(mean(., na.rm = TRUE), 2),
+                        SD = ~round(sd(., na.rm = TRUE), 2),
+                        Min = ~round(min(., na.rm = TRUE), 2),
+                        Q1 = ~round(quantile(., 0.25, na.rm = TRUE), 2),
+                        Median = ~round(median(., na.rm = TRUE), 2),
+                        Q3 = ~round(quantile(., 0.75, na.rm = TRUE), 2),
+                        Max = ~round(max(., na.rm = TRUE), 2)),
+                   .names = "{.col}_{.fn}"))
+
+# Reshape data into a cleaner table
+summary_stats_margin_table <- summary_stats_margin %>%
+  pivot_longer(cols = everything(), names_to = "Variable_Statistic", values_to = "Value") %>%
+  separate(Variable_Statistic, into = c("Variable", "Statistic"), sep = "_(?=[^_]+$)") %>%  # Correct splitting
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+# Print the summary table
+print(summary_stats_margin_table)
+
+hist(summary_stats_margin_table$Mean)
+hist(summary_stats_margin_table$SD)
+
+range(summary_stats_margin_table$Mean)
+```
+
+```{r summ_texture}
+# Generate summary statistics for continuous variables and round to 2 decimals
+summary_stats_texture <- texture_df %>%
+  summarise(across(where(is.numeric), 
+                   list(Count = ~sum(!is.na(.)),
+                        Mean = ~round(mean(., na.rm = TRUE), 2),
+                        SD = ~round(sd(., na.rm = TRUE), 2),
+                        Min = ~round(min(., na.rm = TRUE), 2),
+                        Q1 = ~round(quantile(., 0.25, na.rm = TRUE), 2),
+                        Median = ~round(median(., na.rm = TRUE), 2),
+                        Q3 = ~round(quantile(., 0.75, na.rm = TRUE), 2),
+                        Max = ~round(max(., na.rm = TRUE), 2)),
+                   .names = "{.col}_{.fn}"))
+
+# Reshape data into a cleaner table
+summary_stats_texture_table <- summary_stats_texture %>%
+  pivot_longer(cols = everything(), names_to = "Variable_Statistic", values_to = "Value") %>%
+  separate(Variable_Statistic, into = c("Variable", "Statistic"), sep = "_(?=[^_]+$)") %>%  # Correct splitting
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+# Print the summary table
+print(summary_stats_texture_table)
+
+hist(summary_stats_texture_table$Mean)
+hist(summary_stats_texture_table$SD)
+
+#range(summary_stats_margin_table$Mean)
+```
+
+```{r summ_shape}
+# Generate summary statistics for continuous variables and round to 2 decimals
+summary_stats_shape <- shape_df %>%
+  summarise(across(where(is.numeric), 
+                   list(Count = ~sum(!is.na(.)),
+                        Mean = ~round(mean(., na.rm = TRUE), 2),
+                        SD = ~round(sd(., na.rm = TRUE), 2),
+                        Min = ~round(min(., na.rm = TRUE), 2),
+                        Q1 = ~round(quantile(., 0.25, na.rm = TRUE), 2),
+                        Median = ~round(median(., na.rm = TRUE), 2),
+                        Q3 = ~round(quantile(., 0.75, na.rm = TRUE), 2),
+                        Max = ~round(max(., na.rm = TRUE), 2)),
+                   .names = "{.col}_{.fn}"))
+
+# Reshape data into a cleaner table
+summary_stats_shape_table <- summary_stats_shape %>%
+  pivot_longer(cols = everything(), names_to = "Variable_Statistic", values_to = "Value") %>%
+  separate(Variable_Statistic, into = c("Variable", "Statistic"), sep = "_(?=[^_]+$)") %>%  # Correct splitting
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+# Print the summary table
+print(summary_stats_shape_table)
+
+hist(summary_stats_shape_table$Mean)
+hist(summary_stats_shape_table$SD)
+
+#range(summary_stats_margin_table$Mean)
+```
+
+Shape is not on the same measurement scale, thus all the feature vectors will be centered and scaled.
+
+## Scale and center all data
+
+```{r scale_center_date}
+margin_df[,-1] <- scale(margin_df[,-1])
+shape_df[,-1] <- scale(shape_df[,-1])
+texture_df[,-1] <- scale(texture_df[,-1])
+
+```
+
+```{r echo=FALSE}
+rm(summary_stats_margin)
+rm(summary_stats_margin_table)
+rm(summary_stats_shape)
+rm(summary_stats_shape_table)
+rm(summary_stats_texture)
+rm(summary_stats_texture_table)
+```
+
+## Combine data from different features
+
+```{r merge_data}
+# make sure all species are in the same order:
+## assign unique ID to sample:
+## let i_j be sample j from sample i
+
+check_order <- cbind(unique(texture_df$Species),
+unique(shape_df$Species),
+unique(margin_df$Species)) # these are not in the same order!
+
+count_shape_species_switch <- 0
+cur_species <- shape_df$Species[1]
+for(i in 2:nrow(shape_df)){
+  compare_species <- shape_df$Species[i]
+  if(cur_species!= compare_species){
+    count_shape_species_switch <- count_shape_species_switch +1
+  }
+  cur_species <- compare_species
+}
+# for shape the species only swap 97 times, meaning that the data lists all 16 samples of a species at a time
+
+count_margin_species_switch <- 0
+cur_species <- margin_df$Species[1]
+for(i in 2:nrow(margin_df)){
+  compare_species <- margin_df$Species[i]
+  if(cur_species!= compare_species){
+    count_margin_species_switch <- count_margin_species_switch +1
+  }
+  cur_species <- compare_species
+}
+# also only swaps 97 times
+
+count_texture_species_switch <- 0
+cur_species <- texture_df$Species[1]
+for(i in 2:nrow(texture_df)){
+  compare_species <- texture_df$Species[i]
+  if(cur_species!= compare_species){
+    count_texture_species_switch <- count_texture_species_switch +1
+  }
+  cur_species <- compare_species
+}
+# also swaps only 97 times
+
+# number the samples:
+margin_df$sample_num <- rep(1:16, 98)
+shape_df$sample_num <- rep(1:16, 98)
+texture_df$sample_num <- rep(1:16, 98)
+
+# remove variables no longer needed for analysis
+rm(count_margin_species_switch)
+rm(count_shape_species_switch)
+rm(count_texture_species_switch)
+rm(compare_species)
+rm(cur_species)
+rm(i)
+rm(check_order)
+
+# merge on species and sample number:
+## analysis ready dataset 1 (ard1)
+ard1 <- merge(shape_df, margin_df, by = c("Species", "sample_num"))
+
+ard1 <- merge(ard1, texture_df, by = c("Species", "sample_num"))
+
+# add unique ID:
+ard1$ID <- paste(ard1$Species, ard1$sample_num)
+```
+
+## Split data into train and test sets
+
+Do stratified sampling to ensure the model is trained on each species. The train/test split will be 80/20. This split ensures that each Species has exactly 3 samples in the test set and 13 samples in the training set.
+
+Note that a validation set is not included since cross-validation will be applied in the model training procedure.
+
+```{r stratified_split}
+set.seed(1)
+# create test set
+ard1_T <- stratified(ard1, c("Species"), size = 0.2)
+
+# train set is the remaining samples:
+ard1_M <- ard1[-which(ard1$ID%in% ard1_T$ID), ]
+
+#table(ard1_T$Species)
+rm(margin_df)
+rm(shape_df)
+rm(texture_df)
+```
+
+### Write data to csv
+
+```{r clean_data_csv}
+write.csv(ard1, "created_data/ard1.csv")
+write.csv(ard1_M, "created_data/ard1_M.csv")
+write.csv(ard1_T, "created_data/ard1_T.csv")
+```
+

@@ -1,0 +1,362 @@
+---
+title: "PCA and ISOMAP Dimension Reduction"
+author: "Andomei Smit: SMTAND051"
+date: "02/03/2025"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_caption: true
+    keep_tex: yes
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+# Load packages
+
+```{r packages, warning=FALSE, message=FALSE}
+library(dplyr)
+library(tidyr)
+library(xtable)
+library(splitstackshape)
+library(FactoMineR)
+library(ggplot2)
+library(factoextra)
+library(lattice)
+library(permute)
+library(vegan)
+Sys.setenv(RGL_USE_NULL = TRUE) # need this to get RDRToolbox installed
+library(RDRToolbox)
+library(FNN)
+library(e1071)
+rm(list=ls())
+```
+
+# Load data
+
+```{r load_data}
+rm(list=ls())
+ard1 <- read.csv("created_data/ard1.csv") # full cleaned data set (analysis ready data 1)
+
+ard1_M <- read.csv("created_data/ard1_M.csv") # set for model building (train and validation)
+
+ard1_T <- read.csv("created_data/ard1_T.csv") # set for model testing
+```
+
+
+# Dimension Reduction
+
+## PCA
+
+```{r}
+# columns to ignore:
+ignore_cols <- c("Species", "ID", "sample_num")
+data.pca <- princomp(ard1_M[,-which(colnames(ard1_M)%in% ignore_cols)])
+summary(data.pca)
+
+fviz_eig(data.pca, addlabels = FALSE, barcolor = "darkgreen", barfill = "darkgreen", ncp = 15)
+
+
+# cumulative variance: 
+## 4pcs: 0.483197 - possible first elbow
+## 5pcs: 0.51959
+## 10pcs: 0.64974 - possible second elbow
+## 20pcs: 0.77847
+## 25pcs: 0.81676
+## 30pcs: 0.84533 - large proportion of variance
+```
+
+
+```{r pca_csv}
+pca.scores <- data.pca$scores # all scores
+# write the transformed data from 4PCs to csv
+write.csv(pca.scores[,1:4], "created_data/pca_4pcs_data.csv")
+
+# write the transformed data from 10PCs to csv
+write.csv(pca.scores[,1:10], "created_data/pca_10pcs_data.csv")
+
+# write the transformed data from 30PCs to csv
+write.csv(pca.scores[,1:30], "created_data/pca_30pcs_data.csv")
+```
+
+## ISOMAP
+First find the smallest k such that the graph of nearest neighbours is fully connected.
+
+### Find smallest viable value of k
+```{r isomap_min_k}
+# columns to ignore:
+ignore_cols <- c("Species", "ID", "sample_num")
+data_cols <- which(colnames(ard1_M)%in% ignore_cols)
+
+# Find the smallest k that allows ISOMAP to run
+k_values <- seq(5, 30, 1)  # Test k from 5 to 30
+optimal_k <- NA
+
+for (k in k_values) {
+  tryCatch({
+    isomap_result <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 2, k = k)
+    optimal_k <- k  # If ISOMAP runs successfully, store k and break loop
+    break
+  }, error = function(e) {
+    # If an error occurs, continue to next k
+  })
+}
+
+# Print the first valid k
+if (!is.na(optimal_k)) {
+  print(paste("Optimal k (smallest fully connected graph):", optimal_k))
+} else {
+  print("None of the current values for k resulted in a fully connected graph. Increase k and retry.")
+}
+```
+
+Smallest k is 13. Thus we can test a range of k from 13 to 30.
+
+### Find optimal value of k and d using residual variance
+In order to do this, we will fix the number of dimensions to use for MDS iteratively between 2 to 20 and iterate through possible values of K. For each value of k for a set dimension for the MDS, the residual variance will be calculated and stored. The aim is to find a value of k and corresponding dimensions for MDS that will minimize this variance.
+
+In order to calculate the residual variance, we need the original geodesic distances, that is the sum of the euclidean distances along the shortest paths from the K-nn graphs.
+
+```{r get_geodesic_dist}
+# function to calculate the geodesic distances in the original high dimensional space
+
+calc_geodestic_dist <- function(k, n = nrow(ard1_M)){
+  # calculate the knn
+  knearestn <- get.knn(ard1_M[,-data_cols], k = k)
+  neighbor_index <- as.matrix(knearestn$nn.index) # index of neighbors
+  neighbor_dist <- as.matrix(knearestn$nn.dist) # distance to neighbors
+  
+  # construct a matrix of all adjacency distances for i to j, if they are not reachable,
+  # leave the matrix entry as NA:
+  nn_distances <- matrix(NA, nrow = nrow(ard1_M), ncol = nrow(ard1_M))
+  for(i in 1:n){
+    for(j in 1:k){
+      # for each observation i, find the index of it's neighbor j and 
+      #save their distance there
+      nn_distances[i,neighbor_index[i, j]] = neighbor_dist[i,j]
+    }
+  }
+  
+  # find the shortest path between all observations along these distances
+  shortest_paths <- allShortestPaths(nn_distances)
+  
+  # initialise a matrix for geodesic distances
+  geodesicdist <-  matrix(0,n,n)
+  
+  # find the exact path from each obs to all other observations and get the distance
+  for (i in 1:n){
+    for(j in 1:n){
+      path <- extractPath(shortest_paths, i, j)
+      total_dist = 0
+      for(l in 1:(length(path)-1)){
+       total_dist = total_dist +
+         nn_distances[path[l],path[l+1]]
+      }
+      geodesicdist[i,j] = total_dist
+    }
+  }
+  diag(geodesicdist) <- 0 # set diagonal to zero
+  
+  return(geodesicdist)
+}
+```
+
+Next we need a function to calculate the residual variances.
+
+```{r residual_var}
+# function to calculate the residual variances
+
+calc_residual_variance <- function(geodesic_distances, isomap_embedding) {
+  # Compute Euclidean distances in ISOMAP-reduced space
+  reduced_distances <- as.matrix(dist(isomap_embedding))
+
+  # Flatten both matrices into vectors for correlation calculation
+  geo_vector <- as.vector(geodesic_distances)
+  euclid_vector <- as.vector(reduced_distances)
+
+  # Compute R² (squared Pearson correlation)
+  R2 <- cor(geo_vector, euclid_vector, use = "complete.obs")^2
+
+  # Compute residual variance
+  residual_variance <- 1 - R2
+
+  return(residual_variance)
+}
+
+# test the function:
+# get isomap for k=13 and d=2:
+#isomap_k13_d2 <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 2, k = 13)
+
+#geodesic_k13 <- calc_geodestic_dist(13)
+
+#calc_residual_variance(geodesic_k13, isomap_k13_d2$points)
+```
+
+Lastly, we need a function that puts all of this together.
+
+```{r isomap_tuning}
+# function that takes k and d (dimensions for MDS) and returns the residual variance
+# between the distances of the original high dimensional data and the lower dimensional distances
+
+isomap_tuning <- function(k_nn, d){
+  # get the isomap configuration for the given k and d
+  isomap_result <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = d, k = k_nn)
+  
+  # get the geodesic distances for the given k
+  geodesic_dist <- calc_geodestic_dist(k_nn)
+  
+  # calculate the residual variance
+  resid_var <- calc_residual_variance(geodesic_dist, isomap_result$points)
+  
+  return(resid_var)
+}
+```
+
+```{r apply_isomap}
+# get the results for fixed d
+# Define values to test
+k_values <- seq(13, 63, 5)   # Example values for k_nn
+d_values <- seq(2, 102, 10)   # Example values for d
+
+# Create all (k_nn, d) combinations
+param_grid <- expand.grid(k_nn = k_values, d = d_values)
+
+# Apply isomap_tuning() to all (k_nn, d) pairs using mapply
+residual_variances <- mapply(isomap_tuning, param_grid$k_nn, param_grid$d)
+
+# Store results in a data frame
+results_df <- cbind(param_grid, residual_variance = residual_variances)
+
+# View results
+print(results_df)
+
+# save these results
+write.csv(results_df,"created_data/isomap_tuning_results.csv")
+```
+
+
+```{r isomap_plots}
+# Plot residual variance vs. k (lines for d)
+plot_k_vs_residual <- ggplot(results_df, aes(x = k_nn, y = residual_variance, color = as.factor(d))) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(title = "Residual Variance vs. k (for Different d Values)",
+       x = "Number of Neighbors (k)",
+       y = "Residual Variance",
+       color = "Dimensions (d)") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Plot residual variance vs. d (lines for k)
+plot_d_vs_residual <- ggplot(results_df, aes(x = d, y = residual_variance, color = as.factor(k_nn))) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(title = "Residual Variance vs. d (for Different k Values)",
+       x = "Number of Dimensions (d)",
+       y = "Residual Variance",
+       color = "Neighbors (k)") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Show both plots
+print(plot_k_vs_residual)
+print(plot_d_vs_residual)
+
+# Save the first plot (Residual Variance vs. k, different d values)
+ggsave("plots/residual_vs_k.pdf", plot = plot_k_vs_residual, width = 6, height = 4)
+
+# Save the second plot (Residual Variance vs. d, different k values)
+ggsave("plots/residual_vs_d.pdf", plot = plot_d_vs_residual, width = 6, height = 4)
+```
+
+From the plot that separates the lines based on dimensions, we see that the number of dimensions does not differentiate a reduction in residual variance past 12. I.e. from dimensions 12 onwards, there is not much gain in reduction of residual variance for higher dimensions as compared to d = 12. Setting the number of dimensions to 12 and trying to find a suitable value for k, it can be seen that there is only a slight reduction in variance for k equal to 13, 18 and 23. These are 0.48, 0.43 and 0.4, respectively. However, the final decision will be left after the clustering algorithm has been applied.
+
+```{r isomap_resid_var_calc}
+# residual variance for k = 13 and d = 12
+results_df$residual_variance[which(results_df$k_nn== 13 & results_df$d==12)] # 0.4794
+
+# residual variance for k = 18 and d = 12
+results_df$residual_variance[which(results_df$k_nn== 18 & results_df$d==12)] # 0.4344
+
+# residual variance for k = 23 and d = 12
+results_df$residual_variance[which(results_df$k_nn== 23 & results_df$d==12)] # 0.4025
+```
+
+```{r isomap_csv}
+# isomap with k = 13 and d = 12
+isomap_k13_d12 <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 12, k = 13)
+write.csv(isomap_k13_d12$points, "created_data/isomap_k13_d12.csv")
+
+# isomap with k = 18 and d = 12
+isomap_k18_d12 <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 12, k = 18)
+write.csv(isomap_k18_d12$points, "created_data/isomap_k18_d12.csv")
+
+# isomap with k = 23 and d = 12
+isomap_k23_d12 <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 12, k = 23)
+write.csv(isomap_k23_d12$points, "created_data/isomap_k23_d12.csv")
+
+rm(isomap_k13_d12)
+rm(isomap_k18_d12)
+rm(isomap_k23_d12)
+```
+
+Trying with d= 22 as well.
+
+```{r isomap_csv}
+# isomap with k = 13 and d = 22
+isomap_k13_d22 <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 22, k = 13)
+write.csv(isomap_k13_d22$points, "created_data/isomap_k13_d22.csv")
+
+# isomap with k = 18 and d = 12
+isomap_k18_d22 <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 22, k = 18)
+write.csv(isomap_k18_d22$points, "created_data/isomap_k18_d22.csv")
+
+# isomap with k = 23 and d = 12
+isomap_k23_d22 <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 22, k = 23)
+write.csv(isomap_k23_d22$points, "created_data/isomap_k23_d22.csv")
+
+rm(isomap_k13_d22)
+rm(isomap_k18_d22)
+rm(isomap_k23_d22)
+```
+
+```{r isomap_clear_workspace}
+rm(geodesic_k13)
+rm(param_grid)
+rm(isomap_k13_d2)
+rm(plot_d_vs_residual)
+rm(plot_k_vs_residual)
+rm(results_df)
+rm(d)
+rm(d_values)
+rm(k)
+rm(k_values)
+rm(n)
+rm(optimal_k)
+rm(residual_variances)
+rm(calc_geodestic_dist)
+rm(calc_residual_variance)
+rm(isomap_tuning)
+```
+
+## LLE
+
+LLE assumes two things
+1. That the manifold is continuous (i.e. has no holes)
+2. The the data is not noisy
+
+These is also a further restriction that the number of neighbors in the K-NN algorithm in the first step must be greater than d, the number of dimensions in the lower dimensional space that we are trying to project to. This ensures that we weights that we calculate to construct the lower dimensional space are stable and are not underdetermined.
+
+We again need to specify k and d, where k>d.
+
+```{r}
+test_lle <- LLE(as.matrix(ard1_M[,-data_cols]), dim = 2, k = 5)
+```
+
+```{r}
+#library(lle)
+#install.packages("lle")
+```
