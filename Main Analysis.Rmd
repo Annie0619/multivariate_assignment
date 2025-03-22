@@ -1,0 +1,529 @@
+---
+title: "Mutlivariate Assignment Analysis"
+author: "Andomei Smit: SMTAND051"
+date: "02/03/2025"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_caption: true
+    keep_tex: yes
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+# Load packages
+
+```{r packages, warning=FALSE, message=FALSE}
+library(dplyr)
+library(tidyr)
+library(xtable)
+library(splitstackshape)
+library(FactoMineR)
+library(ggplot2)
+library(factoextra)
+library(lattice)
+library(permute)
+library(vegan)
+Sys.setenv(RGL_USE_NULL = TRUE) # need this to get RDRToolbox installed
+library(RDRToolbox)
+library(FNN)
+library(e1071)
+rm(list=ls())
+```
+
+# Data preparation
+
+## Load data
+```{r load_data}
+# load original margins
+margin_df <- read.delim("data/data_Mar_64.txt", sep = ",")
+shape_df <- read.delim("data/data_Sha_64.txt", sep = ",")
+texture_df <- read.delim("data/data_Tex_64.txt", sep = ",")
+
+colnames(margin_df) <- c("Species", paste0("Feature_", 1:64))
+colnames(shape_df) <- c("Species", paste0("Feature_", 1:64))
+colnames(texture_df) <- c("Species", paste0("Feature_", 1:64))
+```
+
+Investigate the missing features and remove the species missing features. Note that the samples do not have a unique identifier that is the same for each sample across the three features. This means that for any sample missing one of the features, it is impossible to know which sample it relates to. For that reason, all the samples for that species needs to be removed.
+
+## Remove species with samples missing features
+```{r quick_clean}
+# texture only has 1598 observations:
+#table(texture_df$Species) # acer campestre only has 14 images
+#table(shape_df$Species) # only has 15 Acer Capillipes
+
+margin_df <- margin_df[-which(margin_df$Species== "Acer Campestre"),]
+shape_df <- shape_df[-which(shape_df$Species== "Acer Campestre"),]
+texture_df <- texture_df[-which(texture_df$Species== "Acer Campestre"),]
+
+margin_df <- margin_df[-which(margin_df$Species== "Acer Capillipes"),]
+shape_df <- shape_df[-which(shape_df$Species== "Acer Capillipes"),]
+texture_df <- texture_df[-which(texture_df$Species== "Acer Capillipes"),]
+```
+
+## Summary statistics for feature vectors per feature
+Generate some summary statistics to look at each of the feature vectors.
+
+```{r summ_margin}
+# Generate summary statistics for continuous variables and round to 2 decimals
+summary_stats_margin <- margin_df %>%
+  summarise(across(where(is.numeric), 
+                   list(Count = ~sum(!is.na(.)),
+                        Mean = ~round(mean(., na.rm = TRUE), 2),
+                        SD = ~round(sd(., na.rm = TRUE), 2),
+                        Min = ~round(min(., na.rm = TRUE), 2),
+                        Q1 = ~round(quantile(., 0.25, na.rm = TRUE), 2),
+                        Median = ~round(median(., na.rm = TRUE), 2),
+                        Q3 = ~round(quantile(., 0.75, na.rm = TRUE), 2),
+                        Max = ~round(max(., na.rm = TRUE), 2)),
+                   .names = "{.col}_{.fn}"))
+
+# Reshape data into a cleaner table
+summary_stats_margin_table <- summary_stats_margin %>%
+  pivot_longer(cols = everything(), names_to = "Variable_Statistic", values_to = "Value") %>%
+  separate(Variable_Statistic, into = c("Variable", "Statistic"), sep = "_(?=[^_]+$)") %>%  # Correct splitting
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+# Print the summary table
+print(summary_stats_margin_table)
+
+hist(summary_stats_margin_table$Mean)
+hist(summary_stats_margin_table$SD)
+
+range(summary_stats_margin_table$Mean)
+```
+
+```{r summ_texture}
+# Generate summary statistics for continuous variables and round to 2 decimals
+summary_stats_texture <- texture_df %>%
+  summarise(across(where(is.numeric), 
+                   list(Count = ~sum(!is.na(.)),
+                        Mean = ~round(mean(., na.rm = TRUE), 2),
+                        SD = ~round(sd(., na.rm = TRUE), 2),
+                        Min = ~round(min(., na.rm = TRUE), 2),
+                        Q1 = ~round(quantile(., 0.25, na.rm = TRUE), 2),
+                        Median = ~round(median(., na.rm = TRUE), 2),
+                        Q3 = ~round(quantile(., 0.75, na.rm = TRUE), 2),
+                        Max = ~round(max(., na.rm = TRUE), 2)),
+                   .names = "{.col}_{.fn}"))
+
+# Reshape data into a cleaner table
+summary_stats_texture_table <- summary_stats_texture %>%
+  pivot_longer(cols = everything(), names_to = "Variable_Statistic", values_to = "Value") %>%
+  separate(Variable_Statistic, into = c("Variable", "Statistic"), sep = "_(?=[^_]+$)") %>%  # Correct splitting
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+# Print the summary table
+print(summary_stats_texture_table)
+
+hist(summary_stats_texture_table$Mean)
+hist(summary_stats_texture_table$SD)
+
+#range(summary_stats_margin_table$Mean)
+```
+
+```{r summ_shape}
+# Generate summary statistics for continuous variables and round to 2 decimals
+summary_stats_shape <- shape_df %>%
+  summarise(across(where(is.numeric), 
+                   list(Count = ~sum(!is.na(.)),
+                        Mean = ~round(mean(., na.rm = TRUE), 2),
+                        SD = ~round(sd(., na.rm = TRUE), 2),
+                        Min = ~round(min(., na.rm = TRUE), 2),
+                        Q1 = ~round(quantile(., 0.25, na.rm = TRUE), 2),
+                        Median = ~round(median(., na.rm = TRUE), 2),
+                        Q3 = ~round(quantile(., 0.75, na.rm = TRUE), 2),
+                        Max = ~round(max(., na.rm = TRUE), 2)),
+                   .names = "{.col}_{.fn}"))
+
+# Reshape data into a cleaner table
+summary_stats_shape_table <- summary_stats_shape %>%
+  pivot_longer(cols = everything(), names_to = "Variable_Statistic", values_to = "Value") %>%
+  separate(Variable_Statistic, into = c("Variable", "Statistic"), sep = "_(?=[^_]+$)") %>%  # Correct splitting
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+# Print the summary table
+print(summary_stats_shape_table)
+
+hist(summary_stats_shape_table$Mean)
+hist(summary_stats_shape_table$SD)
+
+#range(summary_stats_margin_table$Mean)
+```
+
+Shape is not on the same measurement scale, thus all the feature vectors will be centered and scaled.
+
+## Scale and center all data
+
+```{r scale_center_date}
+margin_df[,-1] <- scale(margin_df[,-1])
+shape_df[,-1] <- scale(shape_df[,-1])
+texture_df[,-1] <- scale(texture_df[,-1])
+
+```
+
+```{r echo=FALSE}
+rm(summary_stats_margin)
+rm(summary_stats_margin_table)
+rm(summary_stats_shape)
+rm(summary_stats_shape_table)
+rm(summary_stats_texture)
+rm(summary_stats_texture_table)
+```
+
+## Combine data from different features
+
+```{r merge_data}
+# make sure all species are in the same order:
+## assign unique ID to sample:
+## let i_j be sample j from sample i
+
+check_order <- cbind(unique(texture_df$Species),
+unique(shape_df$Species),
+unique(margin_df$Species)) # these are not in the same order!
+
+count_shape_species_switch <- 0
+cur_species <- shape_df$Species[1]
+for(i in 2:nrow(shape_df)){
+  compare_species <- shape_df$Species[i]
+  if(cur_species!= compare_species){
+    count_shape_species_switch <- count_shape_species_switch +1
+  }
+  cur_species <- compare_species
+}
+# for shape the species only swap 97 times, meaning that the data lists all 16 samples of a species at a time
+
+count_margin_species_switch <- 0
+cur_species <- margin_df$Species[1]
+for(i in 2:nrow(margin_df)){
+  compare_species <- margin_df$Species[i]
+  if(cur_species!= compare_species){
+    count_margin_species_switch <- count_margin_species_switch +1
+  }
+  cur_species <- compare_species
+}
+# also only swaps 97 times
+
+count_texture_species_switch <- 0
+cur_species <- texture_df$Species[1]
+for(i in 2:nrow(texture_df)){
+  compare_species <- texture_df$Species[i]
+  if(cur_species!= compare_species){
+    count_texture_species_switch <- count_texture_species_switch +1
+  }
+  cur_species <- compare_species
+}
+# also swaps only 97 times
+
+# number the samples:
+margin_df$sample_num <- rep(1:16, 98)
+shape_df$sample_num <- rep(1:16, 98)
+texture_df$sample_num <- rep(1:16, 98)
+
+# remove variables no longer needed for analysis
+rm(count_margin_species_switch)
+rm(count_shape_species_switch)
+rm(count_texture_species_switch)
+rm(compare_species)
+rm(cur_species)
+rm(i)
+rm(check_order)
+
+# merge on species and sample number:
+## analysis ready dataset 1 (ard1)
+ard1 <- merge(shape_df, margin_df, by = c("Species", "sample_num"))
+
+ard1 <- merge(ard1, texture_df, by = c("Species", "sample_num"))
+
+# add unique ID:
+ard1$ID <- paste(ard1$Species, ard1$sample_num)
+```
+
+## Split data into train and test sets
+
+Do stratified sampling to ensure the model is trained on each species. The train/test split will be 80/20. This split ensures that each Species has exactly 3 samples in the test set and 13 samples in the training set.
+
+Note that a validation set is not included since cross-validation will be applied in the model training procedure.
+
+```{r stratified_split}
+set.seed(1)
+# create test set
+ard1_T <- stratified(ard1, c("Species"), size = 0.2)
+
+# train set is the remaining samples:
+ard1_M <- ard1[-which(ard1$ID%in% ard1_T$ID), ]
+
+#table(ard1_T$Species)
+rm(margin_df)
+rm(shape_df)
+rm(texture_df)
+```
+
+# Dimension Reduction
+
+## PCA
+
+```{r}
+# columns to ignore:
+ignore_cols <- c("Species", "ID", "sample_num")
+data.pca <- princomp(ard1_M[,-which(colnames(ard1_M)%in% ignore_cols)])
+summary(data.pca)
+
+fviz_eig(data.pca, addlabels = FALSE, barcolor = "darkgreen", barfill = "darkgreen", ncp = 15)
+
+
+# cumulative variance: 
+## 4pcs: 0.483197 - possible first elbow
+## 5pcs: 0.51959
+## 10pcs: 0.64974 - possible second elbow
+## 20pcs: 0.77847
+## 25pcs: 0.81676
+## 30pcs: 0.84533
+```
+
+## ISOMAP
+First find the smallest k such that the graph of nearest neighbours is fully connected.
+
+### Find smallest viable value of k
+```{r isomap_min_k}
+# columns to ignore:
+ignore_cols <- c("Species", "ID", "sample_num")
+data_cols <- which(colnames(ard1_M)%in% ignore_cols)
+
+# Find the smallest k that allows ISOMAP to run
+k_values <- seq(5, 30, 1)  # Test k from 5 to 30
+optimal_k <- NA
+
+for (k in k_values) {
+  tryCatch({
+    isomap_result <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 2, k = k)
+    optimal_k <- k  # If ISOMAP runs successfully, store k and break loop
+    break
+  }, error = function(e) {
+    # If an error occurs, continue to next k
+  })
+}
+
+# Print the first valid k
+if (!is.na(optimal_k)) {
+  print(paste("Optimal k (smallest fully connected graph):", optimal_k))
+} else {
+  print("None of the current values for k resulted in a fully connected graph. Increase k and retry.")
+}
+```
+
+Smallest k is 13. Thus we can test a range of k from 13 to 30.
+
+### Find optimal value of k and d using residual variance
+In order to do this, we will fix the number of dimensions to use for MDS iteratively between 2 to 20 and iterate through possible values of K. For each value of k for a set dimension for the MDS, the residual variance will be calculated and stored. The aim is to find a value of k and corresponding dimensions for MDS that will minimize this variance.
+
+In order to calculate the residual variance, we need the original geodesic distances, that is the sum of the euclidean distances along the shortest paths from the K-nn graphs.
+
+```{r get_geodesic_dist}
+# function to calculate the geodesic distances in the original high dimensional space
+
+calc_geodestic_dist <- function(k, n = nrow(ard1_M)){
+  # calculate the knn
+  knearestn <- get.knn(ard1_M[,-data_cols], k = k)
+  neighbor_index <- as.matrix(knearestn$nn.index) # index of neighbors
+  neighbor_dist <- as.matrix(knearestn$nn.dist) # distance to neighbors
+  
+  # construct a matrix of all adjacency distances for i to j, if they are not reachable,
+  # leave the matrix entry as NA:
+  nn_distances <- matrix(NA, nrow = nrow(ard1_M), ncol = nrow(ard1_M))
+  for(i in 1:n){
+    for(j in 1:k){
+      # for each observation i, find the index of it's neighbor j and 
+      #save their distance there
+      nn_distances[i,neighbor_index[i, j]] = neighbor_dist[i,j]
+    }
+  }
+  
+  # find the shortest path between all observations along these distances
+  shortest_paths <- allShortestPaths(nn_distances)
+  
+  # initialise a matrix for geodesic distances
+  geodesicdist <-  matrix(0,n,n)
+  
+  # find the exact path from each obs to all other observations and get the distance
+  for (i in 1:n){
+    for(j in 1:n){
+      path <- extractPath(shortest_paths, i, j)
+      total_dist = 0
+      for(l in 1:(length(path)-1)){
+       total_dist = total_dist +
+         nn_distances[path[l],path[l+1]]
+      }
+      geodesicdist[i,j] = total_dist
+    }
+  }
+  diag(geodesicdist) <- 0 # set diagonal to zero
+  
+  return(geodesicdist)
+}
+```
+
+Next we need a function to calculate the residual variances.
+
+```{r residual_var}
+# function to calculate the residual variances
+
+calc_residual_variance <- function(geodesic_distances, isomap_embedding) {
+  # Compute Euclidean distances in ISOMAP-reduced space
+  reduced_distances <- as.matrix(dist(isomap_embedding))
+
+  # Flatten both matrices into vectors for correlation calculation
+  geo_vector <- as.vector(geodesic_distances)
+  euclid_vector <- as.vector(reduced_distances)
+
+  # Compute R² (squared Pearson correlation)
+  R2 <- cor(geo_vector, euclid_vector, use = "complete.obs")^2
+
+  # Compute residual variance
+  residual_variance <- 1 - R2
+
+  return(residual_variance)
+}
+
+# test the function:
+# get isomap for k=13 and d=2:
+#isomap_k13_d2 <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = 2, k = 13)
+
+#geodesic_k13 <- calc_geodestic_dist(13)
+
+#calc_residual_variance(geodesic_k13, isomap_k13_d2$points)
+```
+
+Lastly, we need a function that puts all of this together.
+
+```{r isomap_tuning}
+# function that takes k and d (dimensions for MDS) and returns the residual variance
+# between the distances of the original high dimensional data and the lower dimensional distances
+
+isomap_tuning <- function(k_nn, d){
+  # get the isomap configuration for the given k and d
+  isomap_result <- isomap(dist(as.matrix(ard1_M[,-data_cols])), ndim = d, k = k_nn)
+  
+  # get the geodesic distances for the given k
+  geodesic_dist <- calc_geodestic_dist(k_nn)
+  
+  # calculate the residual variance
+  resid_var <- calc_residual_variance(geodesic_dist, isomap_result$points)
+  
+  return(resid_var)
+}
+```
+
+```{r apply_isomap}
+# get the results for fixed d
+# Define values to test
+k_values <- seq(13, 63, 5)   # Example values for k_nn
+d_values <- seq(2, 102, 10)   # Example values for d
+
+# Create all (k_nn, d) combinations
+param_grid <- expand.grid(k_nn = k_values, d = d_values)
+
+# Apply isomap_tuning() to all (k_nn, d) pairs using mapply
+residual_variances <- mapply(isomap_tuning, param_grid$k_nn, param_grid$d)
+
+# Store results in a data frame
+results_df <- cbind(param_grid, residual_variance = residual_variances)
+
+# View results
+print(results_df)
+
+# save these results
+write.csv(results_df,"data/isomap_tuning_results.csv")
+```
+
+
+```{r isomap_plots}
+# Plot residual variance vs. k (lines for d)
+plot_k_vs_residual <- ggplot(results_df, aes(x = k_nn, y = residual_variance, color = as.factor(d))) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(title = "Residual Variance vs. k (for Different d Values)",
+       x = "Number of Neighbors (k)",
+       y = "Residual Variance",
+       color = "Dimensions (d)") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Plot residual variance vs. d (lines for k)
+plot_d_vs_residual <- ggplot(results_df, aes(x = d, y = residual_variance, color = as.factor(k_nn))) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(title = "Residual Variance vs. d (for Different k Values)",
+       x = "Number of Dimensions (d)",
+       y = "Residual Variance",
+       color = "Neighbors (k)") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Show both plots
+print(plot_k_vs_residual)
+print(plot_d_vs_residual)
+
+# Save the first plot (Residual Variance vs. k, different d values)
+ggsave("plots/residual_vs_k.pdf", plot = plot_k_vs_residual, width = 6, height = 4)
+
+# Save the second plot (Residual Variance vs. d, different k values)
+ggsave("plots/residual_vs_d.pdf", plot = plot_d_vs_residual, width = 6, height = 4)
+```
+
+From the plot that separates the lines based on dimensions, we see that the number of dimensions does not differentiate a reduction in residual variance past 12. I.e. from dimensions 12 and onwards, there is not much gain in reduction of residual variance for higher dimensions as compared to d = 12. Setting the number of dimensions to 12 and trying to find a suitable value for k, it can be seen that there is only a slight reduction in variance for k equal to 13, 18 and 23. These are 0.48, 0.43 and 0.4, respectively. However, the final decision will be left after the clustering algorithm has been applied.
+
+```{r isomap_resid_var_calc}
+# residual variance for k = 13 and d = 12
+results_df$residual_variance[which(results_df$k_nn== 13 & results_df$d==12)] # 0.4794
+
+# residual variance for k = 18 and d = 12
+results_df$residual_variance[which(results_df$k_nn== 18 & results_df$d==12)] # 0.4344
+
+# residual variance for k = 23 and d = 12
+results_df$residual_variance[which(results_df$k_nn== 23 & results_df$d==12)] # 0.4025
+```
+
+
+```{r isomap_clear_workspace}
+rm(geodesic_k13)
+rm(param_grid)
+rm(isomap_k13_d2)
+rm(plot_d_vs_residual)
+rm(plot_k_vs_residual)
+rm(results_df)
+rm(d)
+rm(d_values)
+rm(k)
+rm(k_values)
+rm(n)
+rm(optimal_k)
+rm(residual_variances)
+rm(calc_geodestic_dist)
+rm(calc_residual_variance)
+rm(isomap_tuning)
+```
+
+## LLE
+
+LLE assumes two things
+1. That the manifold is continuous (i.e. has no holes)
+2. The the data is not noisy
+
+These is also a further restriction that the number of neighbors in the K-NN algorithm in the first step must be greater than d, the number of dimensions in the lower dimensional space that we are trying to project to. This ensures that we weights that we calculate to construct the lower dimensional space are stable and are not underdetermined.
+
+We again need to specify k and d, where k>d.
+
+```{r}
+test_lle <- LLE(as.matrix(ard1_M[,-data_cols]), dim = 2, k = 5)
+```
+
+```{r}
+#library(lle)
+#install.packages("lle")
+```
