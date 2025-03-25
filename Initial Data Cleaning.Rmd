@@ -244,31 +244,9 @@ ard1 <- merge(ard1, texture_df, by = c("Species", "sample_num"))
 ard1$ID <- paste(ard1$Species, ard1$sample_num)
 ```
 
-## Split data into train and test sets
-
-Do stratified sampling to ensure the model is trained on each species. The train/test split will be 80/20. This split ensures that each Species has exactly 3 samples in the test set and 13 samples in the training set.
-
-Note that a validation set is not included since cross-validation will be applied in the model training procedure.
-
-```{r stratified_split}
-set.seed(1)
-# create test set
-ard1_T <- stratified(ard1, c("Species"), size = 0.2)
-
-# train set is the remaining samples:
-ard1_M <- ard1[-which(ard1$ID%in% ard1_T$ID), ]
-
-#table(ard1_T$Species)
-rm(margin_df)
-rm(shape_df)
-rm(texture_df)
-```
-
 ### Write data to csv
 
 ```{r clean_data_csv}
 write.csv(ard1, "created_data/ard1.csv")
-write.csv(ard1_M, "created_data/ard1_M.csv")
-write.csv(ard1_T, "created_data/ard1_T.csv")
 ```
 
