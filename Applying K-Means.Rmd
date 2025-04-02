@@ -1,0 +1,270 @@
+---
+title: "Applying K-Means"
+author: "Andomei Smit: SMTAND051"
+date: "02/03/2025"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_caption: true
+    keep_tex: yes
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+# Load packages
+
+```{r packages, warning=FALSE, message=FALSE}
+library(dplyr)
+library(tidyr)
+library(xtable)
+library(splitstackshape)
+library(FactoMineR)
+library(ggplot2)
+library(factoextra)
+library(lattice)
+library(permute)
+library(vegan)
+library(cluster)
+Sys.setenv(RGL_USE_NULL = TRUE) # need this to get RDRToolbox installed
+library(RDRToolbox)
+library(FNN)
+library(e1071)
+library(patchwork)
+library(clue)
+library(kernlab)
+
+rm(list=ls())
+```
+
+# Read in data
+
+```{r all_data}
+# note in each case the first column is like a unique_id (except for lle)
+
+# pca
+pca_4 <- read.csv("created_data/pca_4pcs_data.csv")
+pca_10 <- read.csv("created_data/pca_10pcs_data.csv")
+pca_30 <- read.csv("created_data/pca_30pcs_data.csv")
+
+# isomap
+iso_k16_d22 <- read.csv("created_data/isomap_k16_d22.csv")
+iso_k21_d22 <- read.csv("created_data/isomap_k21_d22.csv")
+iso_k26_d22 <- read.csv("created_data/isomap_k26_d22.csv")
+
+# lle
+lle_k15_d2 <- read.csv("created_data/lle_k15_d2.csv")
+lle_k15_d12 <- read.csv("created_data/lle_k15_d12.csv")
+lle_k25_d22 <- read.csv("created_data/lle_k25_d22.csv")
+lle_k35_d32 <- read.csv("created_data/lle_k35_d32.csv")
+lle_k45_d42 <- read.csv("created_data/lle_k45_d42.csv")
+```
+
+# Get original labels
+```{r}
+ard1<- read.csv("created_data/ard1.csv")
+species <- ard1$Species
+```
+
+# Apply K-Means
+
+In order to apply this, we will be setting a different seed at each iteration of 100. For each round, we will calculate the clustering accuracy by making use of the Hungarian Algorithm.
+
+## Add the species label
+We begin by adding the species label to each dataset.
+
+```{r}
+# pca
+## drop first column
+pca_4 <- pca_4[,-1]
+pca_10 <- pca_10[,-1]
+pca_30 <- pca_30[,-1]
+
+## add species:
+pca_4$Species <- species
+pca_10$Species <- species
+pca_30$Species <- species
+
+# isomap
+## drop first column
+iso_k16_d22 <- iso_k16_d22[,-1]
+iso_k21_d22 <- iso_k21_d22[,-1]
+iso_k26_d22 <- iso_k26_d22[,-1]
+
+## add species label
+iso_k16_d22$Species <- species
+iso_k21_d22$Species <- species
+iso_k26_d22$Species <- species
+
+# lle
+## add species label
+lle_k15_d2$Species <- species
+lle_k15_d12$Species <- species
+lle_k25_d22$Species <- species
+lle_k35_d32$Species <- species
+lle_k45_d42$Species <- species
+```
+
+
+```{r}
+kmeans_species_cluster_counts <- function(df, species_col = "Species", n_clusters = 98, nstart = 25) {
+  # Separate features and species
+  species <- df[[species_col]]
+  features <- df[, !(names(df) %in% species_col)]
+  
+  # Run k-means clustering
+  km_model <- kmeans(features, centers = n_clusters, nstart = nstart)
+  clusters <- km_model$cluster
+  
+  # Combine species and cluster assignments
+  result_df <- data.frame(Species = species, Cluster = clusters)
+  
+  # Create a wide table with counts of clusters per species
+  cluster_counts <- as.data.frame.matrix(table(result_df$Species, result_df$Cluster))
+  
+  # Reset rownames as a proper column
+  cluster_counts$Species <- rownames(cluster_counts)
+  rownames(cluster_counts) <- NULL
+  
+  # Move Species column to the front
+  cluster_counts <- cluster_counts[, c("Species", setdiff(names(cluster_counts), "Species"))]
+  
+  return(list(cluster_counts = cluster_counts,
+              cluster_allocations = result_df))
+}
+```
+
+```{r}
+evaluate_kmeans <- function(df, n_clusters = 98, n_iters = 100, species_col = "Species") {
+  start_time <- Sys.time() # to track how long it takes to run
+  
+  species <- df[[species_col]]
+  seeds <- sample(1:10000, n_iters)
+  
+  # create all result metrics we want to track:
+  all_accuracies <- numeric(length(seeds))
+  all_results <- data.frame(Species = character(), Correct = logical(), stringsAsFactors = FALSE)
+  all_silhouettes <- numeric(length(seeds))
+  all_misclassifications <- data.frame(True_Species = character(), 
+           Misclassified_As = character(),
+              stringsAsFactors = FALSE)
+  
+  # try n_iters different random starting points:
+  for (i in seq_along(seeds)) {
+    set.seed(seeds[i])
+    
+    # get the clister allocations and counts
+    results <- kmeans_species_cluster_counts(df, species_col = species_col, n_clusters = n_clusters)
+    cluster_counts <- results$cluster_counts
+    cluster_allocations <- results$cluster_allocations
+    
+    # build confusion matrix
+    confusion <- as.matrix(cluster_counts[,-1])
+    rownames(confusion) <- cluster_counts$Species
+    # apply hungarian algorithm
+    assignments <- solve_LSAP(confusion, maximum = TRUE)
+    
+    # mappings from species to clusters and vice versa
+    species_to_optimal_cluster <- setNames(as.integer(assignments), rownames(confusion))
+    cluster_to_species <- rownames(confusion)[assignments]
+    
+    # add predicted and correct status
+    cluster_allocations$optim <- species_to_optimal_cluster[cluster_allocations$Species]
+    # true/ false if this is the correct allocation
+    cluster_allocations$Correct <- cluster_allocations$Cluster == cluster_allocations$optim
+    # store the predicted species
+    cluster_allocations$Predicted_Species <- cluster_to_species[cluster_allocations$Cluster]
+    
+    # calculate accuracy
+    all_accuracies[i] <- mean(cluster_allocations$Correct) * 100
+    cat("Clustering accuracy:", i ,": ", round(mean(cluster_allocations$Correct) * 100, 2), "%\n")
+    
+    # save allocations
+    all_results <- bind_rows(all_results, cluster_allocations[, c("Species", "Correct")])
+    
+    # save silhouette score
+    sil <- silhouette(cluster_allocations$Cluster,
+                      dist(df[, !(names(df) %in% species_col)]))
+    all_silhouettes[i] <- mean(sil[, 3])
+    
+    # track misclassifications
+    misclassified_pairs <- cluster_allocations %>%
+      filter(Species != Predicted_Species) %>%
+      select(True_Species = Species, Misclassified_As = Predicted_Species)
+    
+    all_misclassifications <- bind_rows(all_misclassifications, misclassified_pairs)
+  }
+  
+  # per-species accuracy
+  per_species_accuracy <- all_results %>%
+    group_by(Species) %>%
+    summarise(Species_Accuracy = mean(Correct) * 100) %>%
+    arrange(desc(Species_Accuracy))
+  
+  # most frequent misclassification per species
+  most_common_misclass <- all_misclassifications %>%
+    group_by(True_Species, Misclassified_As) %>%
+    summarise(Count = n(), .groups = "drop") %>%
+    group_by(True_Species) %>%
+    top_n(1, Count) %>%
+    arrange(desc(Count))
+  
+  # end time to calculate total run time
+  end_time <- Sys.time() 
+elapsed_time <- as.numeric(difftime(end_time, start_time, units = "secs"))
+
+  return(list(
+    overall_accuracy = mean(all_accuracies),
+    accuracy_sd = sd(all_accuracies),
+    per_species_accuracy = per_species_accuracy,
+    most_common_misclassification = most_common_misclass,
+    overall_sd = sd(all_accuracies),
+    all_accuracies = all_accuracies,
+    silhouette_score = mean(all_silhouettes),
+    silhouette_sd = sd(all_silhouettes),
+    elapsed_time = elapsed_time
+
+  ))
+}
+```
+
+```{r}
+# store all reduced datasets as a list
+reduced_datasets <- list(
+  pca_4 = pca_4,
+  pca_10 = pca_10,
+  pca_30 = pca_30,
+  iso_k16_d22 = iso_k16_d22,
+  iso_k21_d22 = iso_k21_d22,
+  iso_k26_d22 = iso_k26_d22,
+  lle_k15_d2 = lle_k15_d2,
+  lle_k15_d12 = lle_k15_d12,
+  lle_k25_d22 = lle_k25_d22,
+  lle_k35_d32 = lle_k35_d32,
+  lle_k45_d42 = lle_k45_d42
+)
+
+# apply the evaluation function to each
+results_list <- lapply(reduced_datasets, evaluate_kmeans)
+
+# build a summary table
+summary_table <- data.frame(
+  Dataset = names(results_list),
+  Accuracy = sapply(results_list, function(res) round(res$overall_accuracy, 2)),
+  Accuracy_SD = sapply(results_list, function(res) round(res$accuracy_sd, 2)),
+  Silhouette = sapply(results_list, function(res) round(res$silhouette_score, 4)),
+  Silhouette_SD = sapply(results_list, function(res) round(res$silhouette_sd, 4)),
+  Elapsed_Time = sapply(results_list, function(res) round(res$elapsed_time, 4)),
+  stringsAsFactors = FALSE
+)
+
+print(summary_table)
+
+# write to csv
+write.csv(summary_table, "results/kmeans_accuracy_summary.csv", row.names = FALSE)
+```
+
+

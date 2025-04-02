@@ -74,6 +74,17 @@ fviz_eig(data.pca, addlabels = FALSE, barcolor = "darkgreen", barfill = "darkgre
 dev.off()
 ```
 
+To determine the largest number of principal components to use, apply the Kaiser Criterion.
+
+```{r kaiser}
+# Get eigenvalues
+eigenvalues <- (data.pca$sdev)^2
+
+# Kaiser criterion: keep components > 1
+kaiser_pcs <- which(eigenvalues > 1)
+length(kaiser_pcs)  # number of PCs to retain = 30
+```
+
 
 ```{r pca_csv}
 pca.scores <- data.pca$scores # all scores
@@ -88,6 +99,7 @@ write.csv(pca.scores[,1:30], "created_data/pca_30pcs_data.csv")
 ```
 
 ## ISOMAP
+
 First find the smallest k such that the graph of nearest neighbours is fully connected.
 
 ### Find smallest viable value of k
@@ -222,6 +234,8 @@ write.csv(results_df, "created_data/isomap_tuning_results.csv", row.names = FALS
 
 
 ```{r isomap_plots}
+results_df <- read.csv("created_data/isomap_tuning_results.csv")
+
 # Plot residual variance vs. k (lines for d)
 plot_k_vs_residual <- ggplot(results_df, aes(x = k_nn, y = residual_variance, color = as.factor(d))) +
   geom_line(linewidth = 0.4) +
@@ -255,10 +269,10 @@ print(plot_k_vs_residual)
 print(plot_d_vs_residual)
 
 # Save the first plot (Residual Variance vs. k, different d values)
-ggsave("plots/residual_vs_k.pdf", plot = plot_k_vs_residual, width = 6, height = 4)
+ggsave("plots/residual_vs_k.pdf", plot = plot_k_vs_residual, width = 4, height = 2.5)
 
 # Save the second plot (Residual Variance vs. d, different k values)
-ggsave("plots/residual_vs_d.pdf", plot = plot_d_vs_residual, width = 6, height = 4)
+ggsave("plots/residual_vs_d.pdf", plot = plot_d_vs_residual, width = 4, height = 2.5)
 ```
 
 ```{r isomap_combined_plot}
