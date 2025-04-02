@@ -108,6 +108,7 @@ lle_k35_d32$Species <- species
 lle_k45_d42$Species <- species
 ```
 
+## Calculate K-means allocation to clusters
 
 ```{r}
 kmeans_species_cluster_counts <- function(df, species_col = "Species", n_clusters = 98, nstart = 25) {
@@ -136,6 +137,9 @@ kmeans_species_cluster_counts <- function(df, species_col = "Species", n_cluster
               cluster_allocations = result_df))
 }
 ```
+
+# Evaluate performance
+We can now apply the function to cluster the data numerous times for different random seeds. At each iteration the hungarian algorithm is applied to determine the optimal species allocation for the arbitrary, automatic cluster labels assigned by the kmeans algorithm. Various performance metrics are calculated to be compared.
 
 ```{r}
 evaluate_kmeans <- function(df, n_clusters = 98, n_iters = 100, species_col = "Species") {
