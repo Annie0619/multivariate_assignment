@@ -17,8 +17,7 @@ This project explores the application of multivariate dimension reduction techni
 | File/Folder                              | Description                                                   |
 | ---------------------------------------- | ------------------------------------------------------------- |
 | `PCA and ISOMAP Dimension Reduction.rmd` | R Markdown script for PCA and Isomap preprocessing and tuning |
-| `LLE_Dimension_Deduction.ipynb`          | Python notebook for LLE dimension reduction ([![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb)) |                                                                                          |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `LLE_Dimension_Deduction.ipynb`          | Python notebook for LLE dimension reduction ([![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb)) |                                                
 | `Applying K-means.rmd`                                         | R Markdown script applying K-means clustering and evaluating performance                 |
 | `Multivariate_Assignment_Final_Write_up.pdf`                   | Final academic write-up summarizing methods and findings                                 |
 | `created_data/`                                                | Folder containing intermediate and final datasets (e.g., reduced-dimensional embeddings) |
