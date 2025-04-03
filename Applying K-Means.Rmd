@@ -235,6 +235,22 @@ elapsed_time <- as.numeric(difftime(end_time, start_time, units = "secs"))
 }
 ```
 
+## Baseline: K-Means on original data
+Apply the K-means algorithm to the original, non-reduced data.
+
+```{r}
+results_original <- evaluate_kmeans(ard1[,-c(1,3,196)])
+
+results_original$overall_accuracy
+results_original$accuracy_sd
+results_original$silhouette_score
+results_original$silhouette_sd
+results_original$elapsed_time
+```
+
+
+## Apply K-means to all reduced dimensions datasets
+
 ```{r}
 # store all reduced datasets as a list
 reduced_datasets <- list(

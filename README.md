@@ -24,6 +24,9 @@ This project explores the application of multivariate dimension reduction techni
 | `created_data/`                                                | Folder containing intermediate and final datasets (e.g., reduced-dimensional embeddings) |
 | `plots/`                                                       | Folder containing figures generated during analysis                                      |
 | `data/`                                                       | Folder containing original extracted features from Mallah et al. (2013)                                      |
+| `results/`                                                       | Folder containing the results after applying K-Means to the various reduced dimension data sets.                                     |
+| `presentation/`                                                       | Folder containing the slides used for the presentation of the progress of the project                                 |
+| `previous_work/`                                                       | Folder containing a brief proposal of three initial topics that were considered for this project                                    |
 
 ---
 
