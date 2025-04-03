@@ -16,6 +16,7 @@ This project explores the application of multivariate dimension reduction techni
 
 | File/Folder                              | Description                                                   |
 | ---------------------------------------- | ------------------------------------------------------------- |
+| `Initial Data Cleaning.rmd` | R Markdown script to remove species with incomplete features |
 | `PCA and ISOMAP Dimension Reduction.rmd` | R Markdown script for PCA and Isomap preprocessing and tuning |
 | `LLE_Dimension_Deduction.ipynb`          | Python notebook for LLE dimension reduction ([![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb)) |                                                
 | `Applying K-means.rmd`                                         | R Markdown script applying K-means clustering and evaluating performance                 |
@@ -27,7 +28,7 @@ This project explores the application of multivariate dimension reduction techni
 ---
 
 ## How to Run the Code
-To created the Analysis Ready Dataset (ard1), run the `Initial Data Cleaning.Rmd` file. This will remove the two species with incomplete feature sets and write a csv file to the created_data folder.
+To created the Analysis Ready Dataset (`ard1.csv`), run the `Initial Data Cleaning.Rmd` file. This will remove the two species with incomplete feature sets and write a `.csv` file to the `created_data` folder.
 
 ### R Scripts:
 
@@ -46,7 +47,7 @@ Required scripts (in order):
 To run the LLE dimension reduction in Python:
 
 1. Open the notebook
-[`lle_dimension_reduction.ipynb`](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb)
+[`lle_dimension_reduction.ipynb`](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb)
 2. Click `Runtime > Run all` to execute all cells
 
 This will generate reduced embeddings using LLE and export them for use in clustering.
