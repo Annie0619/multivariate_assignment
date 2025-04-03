@@ -20,7 +20,7 @@ This project explores the application of multivariate dimension reduction techni
 | `PCA and ISOMAP Dimension Reduction.rmd` | R Markdown script for PCA and Isomap preprocessing and tuning |
 | `LLE_Dimension_Deduction.ipynb`          | Python notebook for LLE dimension reduction [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb) |                                                
 | `Applying K-means.rmd`                                         | R Markdown script applying K-means clustering and evaluating performance                 |
-| `Multivariate_Assignment_Final_Write_up.pdf`                   | Final academic write-up summarizing methods and findings                                 |
+| `Final Report.pdf`                   | Final academic write-up summarizing methods and findings                                 |
 | `created_data/`                                                | Folder containing intermediate and final datasets (e.g., reduced-dimensional embeddings) |
 | `plots/`                                                       | Folder containing figures generated during analysis                                      |
 | `data/`                                                       | Folder containing original extracted features from Mallah et al. (2013)                                      |
@@ -111,7 +111,7 @@ Python dependencies for Colab are handled within the notebook.
 - Mallah, C., Coquin, D., & Tougne, L. (2013). *Plant Leaf Classification Using Probabilistic Integration of Shape, Texture and Margin Features*.
 - Beck, H. E. et al. (2020), Malik et al. (2022), Tariku et al. (2023), Christenhusz et al. (2016) — see final write-up for full citations.
 
-For full details on methodology and results, see the final report: [`Multivariate_Assignment_Final_Write_up.pdf`](Multivariate_Assignment_Final_Write_up.pdf)
+For full details on methodology and results, see the final report: [`Final Report.pdf`](Final Report.pdf)
 
 ---
 
