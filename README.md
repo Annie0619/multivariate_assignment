@@ -1,7 +1,3 @@
-
-
-Adding this link here to open the LLE Dimension Reduction notebook directly in Google Colab: [Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb)
-
 # Multivariate Techniques for Leaf Species Classification
 
 ### Author: Andomei Smit
@@ -21,9 +17,7 @@ This project explores the application of multivariate dimension reduction techni
 | File/Folder                              | Description                                                   |
 | ---------------------------------------- | ------------------------------------------------------------- |
 | `PCA and ISOMAP Dimension Reduction.rmd` | R Markdown script for PCA and Isomap preprocessing and tuning |
-| `LLE_Dimension_Deduction.ipynb`          | Python notebook for LLE dimension reduction (                 |
-
-| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb) |                                                                                          |
+| `LLE_Dimension_Deduction.ipynb`          | Python notebook for LLE dimension reduction ([![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Annie0619/multivariate_assignment/blob/main/LLE_Dimension_Reduction.ipynb)) |                                                                                          |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `Applying K-means.rmd`                                         | R Markdown script applying K-means clustering and evaluating performance                 |
 | `Multivariate_Assignment_Final_Write_up.pdf`                   | Final academic write-up summarizing methods and findings                                 |
@@ -33,7 +27,8 @@ This project explores the application of multivariate dimension reduction techni
 
 ---
 
-##️ How to Run the Code
+## How to Run the Code
+To created the Analysis Ready Dataset (ard1), run the `Initial Data Cleaning.Rmd` file. This will remove the two species with incomplete feature sets and write a csv file to the created_data folder.
 
 ### R Scripts:
 
