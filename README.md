@@ -111,7 +111,7 @@ Python dependencies for Colab are handled within the notebook.
 - Mallah, C., Coquin, D., & Tougne, L. (2013). *Plant Leaf Classification Using Probabilistic Integration of Shape, Texture and Margin Features*.
 - Beck, H. E. et al. (2020), Malik et al. (2022), Tariku et al. (2023), Christenhusz et al. (2016) — see final write-up for full citations.
 
-For full details on methodology and results, see the final report: [`Final Report.pdf`](Final Report.pdf)
+For full details on methodology and results, see the final report: [`View Final Report.pdf`](https://github.com/Annie0619/multivariate_assignment/blob/main/Final%20Report.pdf)
 
 ---
 
